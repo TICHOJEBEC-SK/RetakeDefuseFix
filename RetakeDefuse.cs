@@ -1,52 +1,45 @@
 ﻿using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
+using CounterStrikeSharp.API.Modules.Utils;
 
 namespace RetakeDefuse
 {
-    public partial class RetakeDefuse : BasePlugin
+    public class RetakeDefuse : BasePlugin
     {
         public override string ModuleAuthor => "TICHOJEBEC";
         public override string ModuleName => "Defuser Fix";
-        public override string ModuleVersion => "v1.0";
+        public override string ModuleVersion => "v1.1";
 
         public override void Load(bool hotReload)
         {
-            RegisterEventHandler<EventBombPlanted>((@event, info) =>
-            {
-                GiveAllCtDefuseKit();
-                return HookResult.Continue;
-            });
+            RegisterEventHandler<EventBombPlanted>(OnBombPlanted);
         }
 
         private static List<CCSPlayerController> GetValidPlayers()
         {
             return Utilities.GetPlayers()
-                .Where(player => player.IsValid && player.PlayerPawn.Value != null)
+                .Where(player => player is { IsValid: true, PawnIsAlive: true })
                 .ToList();
         }
 
-        public static bool HasWeapon(CCSPlayerController player, string weaponName)
+        private static bool HasDefuser(CCSPlayerController? player)
         {
-            if (!player.IsValid || !player.PawnIsAlive) return false;
+            if (player is null or { IsValid: false } or { PawnIsAlive: false })
+                return false;
 
             var pawn = player.PlayerPawn.Value;
             return pawn?.WeaponServices?.MyWeapons
-                .Any(weapon => weapon?.Value?.IsValid == true && weapon.Value.DesignerName?.Contains(weaponName) == true) ?? false;
+                .Any(weapon => weapon.Value?.IsValid == true && weapon.Value.DesignerName.Contains("item_defuser")) ?? false;
         }
 
-        private HookResult GiveAllCtDefuseKit()
-        { 
-            var players = GetValidPlayers();  
+        private HookResult OnBombPlanted(EventBombPlanted @event, GameEventInfo info)
+        {
+            var players = GetValidPlayers();
             foreach (var player in players)
             {
-                if (player.TeamNum == 3 && !HasWeapon(player, "item_defuser"))
+                if (player.Team == CsTeam.CounterTerrorist && !HasDefuser(player))
                 {
-                    var playerPawn = player.PlayerPawn.Value;
-                    if (playerPawn?.ItemServices != null)
-                    {
-                        var itemServices = new CCSPlayer_ItemServices(playerPawn.ItemServices.Handle);
-                        itemServices.HasDefuser = true;
-                    }
+                    player.GiveNamedItem("item_defuser");
                 }
             }
             return HookResult.Continue;
